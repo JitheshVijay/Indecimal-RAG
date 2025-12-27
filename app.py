@@ -477,6 +477,7 @@ def main():
             st.markdown("## Models")
             st.caption(f"Embeddings: {stats['embedding_model']}")
             st.caption(f"LLM: {stats['llm_model']}")
+            st.caption(f"Backend: {stats.get('llm_backend', 'Unknown')}")
             
             st.markdown("---")
             
