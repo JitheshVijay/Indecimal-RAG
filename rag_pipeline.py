@@ -1,17 +1,7 @@
 """
-================================================================================
-RAG PIPELINE FOR INDECIMAL CONSTRUCTION MARKETPLACE AI ASSISTANT
-================================================================================
+RAG Pipeline for Indecimal Construction Marketplace AI Assistant
 
-This module implements a Retrieval-Augmented Generation (RAG) pipeline that:
-1. Loads and chunks markdown documents by headers
-2. Generates embeddings using sentence-transformers (all-MiniLM-L6-v2)
-3. Performs semantic search using FAISS vector store
-4. Generates grounded answers using Ollama (local) or OpenRouter (cloud fallback)
-
-LLM Priority:
-1. Ollama (local) - Used when running locally with Ollama installed
-2. OpenRouter API (cloud) - Fallback for deployed environments
+Uses Ollama (local) or OpenRouter (cloud) for LLM generation.
 """
 
 import os
@@ -35,7 +25,7 @@ try:
 except ImportError:
     OLLAMA_AVAILABLE = False
 
-# Check OpenAI client availability (for OpenRouter)
+# Check OpenAI client availability
 try:
     import openai
     OPENAI_AVAILABLE = True
@@ -43,9 +33,26 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
 
+def get_openrouter_key():
+    """Get OpenRouter API key from environment or Streamlit secrets."""
+    # Try environment variable first
+    key = os.environ.get("OPENROUTER_API_KEY", "")
+    if key:
+        return key
+    
+    # Try Streamlit secrets (for cloud deployment)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and "OPENROUTER_API_KEY" in st.secrets:
+            return st.secrets["OPENROUTER_API_KEY"]
+    except:
+        pass
+    
+    return ""
+
+
 @dataclass
 class DocumentChunk:
-    """Represents a chunk of a document with metadata."""
     chunk_id: str
     text: str
     source: str
@@ -55,8 +62,6 @@ class DocumentChunk:
 
 
 class RAGPipeline:
-    """RAG pipeline with Ollama (local) and OpenRouter (cloud) fallback."""
-    
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     DEFAULT_OLLAMA_MODEL = "llama3.2:1b"
     DEFAULT_OPENROUTER_MODEL = "meta-llama/llama-3.2-3b-instruct:free"
@@ -64,9 +69,11 @@ class RAGPipeline:
     def __init__(self, documents_dir: str = None, llm_model: str = None):
         self.documents_dir = documents_dir or str(Path(__file__).parent)
         
+        # Get API key
+        self.openrouter_api_key = get_openrouter_key()
+        
         # Determine LLM backend
         self.use_ollama = OLLAMA_AVAILABLE
-        self.openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
         
         if self.use_ollama:
             self.llm_model = llm_model or self.DEFAULT_OLLAMA_MODEL
@@ -87,6 +94,10 @@ class RAGPipeline:
         
         self._load_and_index_documents()
         print(f"LLM Backend: {self.llm_backend}")
+        if self.openrouter_api_key:
+            print("OpenRouter API key: Found")
+        else:
+            print("OpenRouter API key: Not found")
     
     def _load_and_index_documents(self):
         doc_files = ["doc1.md", "doc2.md", "doc3.md"]
@@ -99,9 +110,9 @@ class RAGPipeline:
                 self.chunks.extend(chunks)
         
         if not self.chunks:
-            raise ValueError("No documents found to index!")
+            raise ValueError("No documents found!")
         
-        print(f"Total chunks created: {len(self.chunks)}")
+        print(f"Total chunks: {len(self.chunks)}")
         
         print("Generating embeddings...")
         texts = [chunk.text for chunk in self.chunks]
@@ -173,14 +184,14 @@ class RAGPipeline:
             context_parts.append(f"[Source {i}: {chunk.source} - {chunk.section}]\n{chunk.text}")
         context = "\n\n---\n\n".join(context_parts)
         
-        system_prompt = """You are an AI assistant for Indecimal, a construction marketplace company.
+        system_prompt = """You are an AI assistant for Indecimal, a construction marketplace.
 
-IMPORTANT INSTRUCTIONS:
-1. Answer ONLY using the information provided in the context below.
-2. If the answer cannot be found in the context, say "I don't have information about that in the provided documents."
-3. Cite the source (e.g., [Source 1]) when providing information.
-4. Be concise and direct in your answers.
-5. Do NOT make up or hallucinate information not present in the context."""
+RULES:
+1. Answer ONLY using the provided context.
+2. If info not in context, say "I don't have that information."
+3. Cite sources like [Source 1].
+4. Be concise.
+5. Never make up information."""
         
         user_prompt = f"""Context:
 {context}
@@ -201,7 +212,7 @@ Answer (cite sources):"""
         elif self.openrouter_api_key and OPENAI_AVAILABLE:
             return self._generate_with_openrouter(messages)
         else:
-            return "Error: No LLM backend available. Please install Ollama locally or set OPENROUTER_API_KEY."
+            return "Error: No LLM backend available. Please install Ollama locally or set OPENROUTER_API_KEY environment variable."
     
     def _generate_with_ollama(self, messages: List[Dict]) -> str:
         try:
@@ -256,11 +267,4 @@ Answer (cite sources):"""
 
 if __name__ == "__main__":
     rag = RAGPipeline()
-    print("\nRAG Pipeline Statistics:")
     print(json.dumps(rag.get_stats(), indent=2))
-    
-    test_query = "What is the price of the Premier package?"
-    print(f"\nTest Query: {test_query}")
-    result = rag.query(test_query)
-    print("\nGenerated Answer:")
-    print(result["generated_answer"])
