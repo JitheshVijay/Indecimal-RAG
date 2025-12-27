@@ -177,11 +177,16 @@ def retrieve(self, query: str, top_k: int = 3):
 - `top_k = 3`: Retrieve 3 most relevant chunks
 - Provides sufficient context without overwhelming the LLM
 
-### 5. LLM Integration (Ollama)
+### 5. LLM Integration
 
-**Model**: `llama3.2:1b`
+**Dual Backend Support:**
 
-**Grounding Prompt**:
+| Backend | Model | When Used |
+|---------|-------|-----------|
+| Ollama (local) | `llama3.2:1b` | Running locally with Ollama installed |
+| OpenRouter (cloud) | `llama-3.2-3b-instruct:free` | Deployed on Streamlit Cloud |
+
+**Grounding Prompt:**
 ```
 You are Indecimal's AI assistant. Answer questions ONLY using the 
 provided context. If the information is not in the context, say 
@@ -194,11 +199,9 @@ RULES:
 4. Never make up information
 ```
 
-**Why local LLM?**
-- No API costs
-- Privacy (data never leaves the machine)
-- Faster iteration during development
-- Works offline
+**Why this approach?**
+- **Local (Ollama)**: Free, private, works offline - ideal for development
+- **Cloud (OpenRouter)**: Free API tier, enables deployed demo to work
 
 ### 6. User Interface (Streamlit)
 
@@ -308,8 +311,9 @@ pip install -r requirements.txt
 - `faiss-cpu`: Vector similarity search
 - `streamlit`: Web UI framework
 - `ollama`: Local LLM client
+- `openai`: OpenRouter API client (for cloud deployment)
 
-### Step 3: Install Ollama
+### Step 3: Install Ollama (for local use)
 
 1. Download from [ollama.com](https://ollama.com/)
 2. Install and launch the application
@@ -328,6 +332,17 @@ python -m streamlit run app.py
 ```
 
 Open http://localhost:8501 in your browser.
+
+### Cloud Deployment (Streamlit Cloud)
+
+For the deployed version to work without Ollama:
+
+1. Get a free API key from [OpenRouter](https://openrouter.ai/keys)
+2. In Streamlit Cloud, go to **Settings → Secrets**
+3. Add: `OPENROUTER_API_KEY = "your-key-here"`
+4. Reboot the app
+
+**Live Demo**: [jitheshvijay-indecimal-rag.streamlit.app](https://jitheshvijay-indecimal-rag.streamlit.app)
 
 ---
 
