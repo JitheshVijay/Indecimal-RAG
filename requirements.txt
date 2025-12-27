@@ -1,17 +1,15 @@
-# ================================================================================
-# INDECIMAL RAG CHATBOT - PYTHON DEPENDENCIES
-# ================================================================================
+# Indecimal RAG Chatbot - Dependencies
 
-# Core RAG dependencies
-sentence-transformers>=2.2.0  # Text embeddings (all-MiniLM-L6-v2)
+# Core RAG
+sentence-transformers>=2.2.0  # Text embeddings
 faiss-cpu>=1.7.4              # Vector similarity search
 
 # LLM backends
-ollama>=0.1.0                 # Local LLM (primary - for local use)
-openai>=1.0.0                 # OpenRouter API client (fallback - for cloud deployment)
+ollama>=0.1.0                 # Local LLM (primary)
+openai>=1.0.0                 # OpenRouter API (cloud fallback)
 
 # Web UI
-streamlit>=1.28.0             # Chat interface framework
+streamlit>=1.28.0             # Chat interface
 
 # Utilities
-numpy>=1.24.0                 # Numerical operations
+numpy>=1.24.0

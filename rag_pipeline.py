@@ -9,9 +9,6 @@ This module implements a Retrieval-Augmented Generation (RAG) pipeline that:
 3. Performs semantic search using FAISS vector store
 4. Generates grounded answers using Ollama (local) or OpenRouter (cloud fallback)
 
-The pipeline ensures all answers are strictly grounded in the retrieved context,
-with explicit source citations and refusal to hallucinate information.
-
 LLM Priority:
 1. Ollama (local) - Used when running locally with Ollama installed
 2. OpenRouter API (cloud) - Fallback for deployed environments
@@ -24,16 +21,12 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
-# Embedding model
 from sentence_transformers import SentenceTransformer
-
-# Vector store
 import faiss
 
-# LLM options
+# Check Ollama availability
 try:
     import ollama
-    # Test if Ollama is actually running
     try:
         ollama.list()
         OLLAMA_AVAILABLE = True
@@ -42,6 +35,7 @@ try:
 except ImportError:
     OLLAMA_AVAILABLE = False
 
+# Check OpenAI client availability (for OpenRouter)
 try:
     import openai
     OPENAI_AVAILABLE = True
@@ -61,18 +55,13 @@ class DocumentChunk:
 
 
 class RAGPipeline:
-    """
-    A complete RAG pipeline for the Indecimal construction marketplace assistant.
-    
-    Uses Ollama locally when available, falls back to OpenRouter API for cloud deployment.
-    """
+    """RAG pipeline with Ollama (local) and OpenRouter (cloud) fallback."""
     
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     DEFAULT_OLLAMA_MODEL = "llama3.2:1b"
     DEFAULT_OPENROUTER_MODEL = "meta-llama/llama-3.2-3b-instruct:free"
     
     def __init__(self, documents_dir: str = None, llm_model: str = None):
-        """Initialize the RAG pipeline."""
         self.documents_dir = documents_dir or str(Path(__file__).parent)
         
         # Determine LLM backend
@@ -89,22 +78,17 @@ class RAGPipeline:
             self.llm_model = "none"
             self.llm_backend = "None available"
         
-        # Initialize embedding model
         print(f"Loading embedding model: {self.EMBEDDING_MODEL}...")
         self.embedding_model = SentenceTransformer(self.EMBEDDING_MODEL)
         
-        # Storage
         self.chunks: List[DocumentChunk] = []
         self.embeddings: Optional[np.ndarray] = None
         self.index: Optional[faiss.IndexFlatL2] = None
         
-        # Load documents
         self._load_and_index_documents()
-        
         print(f"LLM Backend: {self.llm_backend}")
     
     def _load_and_index_documents(self):
-        """Load all markdown documents and build the FAISS index."""
         doc_files = ["doc1.md", "doc2.md", "doc3.md"]
         
         for doc_file in doc_files:
@@ -119,28 +103,22 @@ class RAGPipeline:
         
         print(f"Total chunks created: {len(self.chunks)}")
         
-        # Generate embeddings
         print("Generating embeddings...")
         texts = [chunk.text for chunk in self.chunks]
         self.embeddings = self.embedding_model.encode(texts, convert_to_numpy=True)
         
-        # Build FAISS index
         print("Building FAISS index...")
         dimension = self.embeddings.shape[1]
         self.index = faiss.IndexFlatL2(dimension)
         self.index.add(self.embeddings.astype('float32'))
-        
         print(f"Index built with {self.index.ntotal} vectors")
     
     def _chunk_document(self, doc_path: str) -> List[DocumentChunk]:
-        """Chunk a markdown document by headers."""
         with open(doc_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            lines = content.split('\n')
+            lines = f.read().split('\n')
         
         chunks = []
         source = os.path.basename(doc_path)
-        
         current_section = ""
         current_text_lines = []
         current_start_line = 1
@@ -150,29 +128,25 @@ class RAGPipeline:
                 if current_text_lines:
                     chunk_text = '\n'.join(current_text_lines).strip()
                     if chunk_text and len(chunk_text) > 50:
-                        chunk_id = f"{source}_{len(chunks)}"
                         chunks.append(DocumentChunk(
-                            chunk_id=chunk_id,
+                            chunk_id=f"{source}_{len(chunks)}",
                             text=chunk_text,
                             source=source,
                             section=current_section,
                             start_line=current_start_line,
                             end_line=i - 1
                         ))
-                
                 current_section = line.lstrip('#').strip()
                 current_text_lines = [line]
                 current_start_line = i
             else:
                 current_text_lines.append(line)
         
-        # Last chunk
         if current_text_lines:
             chunk_text = '\n'.join(current_text_lines).strip()
             if chunk_text and len(chunk_text) > 50:
-                chunk_id = f"{source}_{len(chunks)}"
                 chunks.append(DocumentChunk(
-                    chunk_id=chunk_id,
+                    chunk_id=f"{source}_{len(chunks)}",
                     text=chunk_text,
                     source=source,
                     section=current_section,
@@ -183,7 +157,6 @@ class RAGPipeline:
         return chunks
     
     def retrieve(self, query: str, top_k: int = 3) -> List[Tuple[DocumentChunk, float]]:
-        """Retrieve the top-k most relevant chunks for a query."""
         query_embedding = self.embedding_model.encode([query], convert_to_numpy=True)
         distances, indices = self.index.search(query_embedding.astype('float32'), top_k)
         
@@ -192,16 +165,12 @@ class RAGPipeline:
             if idx < len(self.chunks):
                 similarity = 1 / (1 + distance)
                 results.append((self.chunks[idx], similarity))
-        
         return results
     
     def generate_answer(self, query: str, retrieved_chunks: List[Tuple[DocumentChunk, float]]) -> str:
-        """Generate a grounded answer using available LLM."""
-        # Build context
         context_parts = []
         for i, (chunk, score) in enumerate(retrieved_chunks, 1):
             context_parts.append(f"[Source {i}: {chunk.source} - {chunk.section}]\n{chunk.text}")
-        
         context = "\n\n---\n\n".join(context_parts)
         
         system_prompt = """You are an AI assistant for Indecimal, a construction marketplace company.
@@ -211,8 +180,7 @@ IMPORTANT INSTRUCTIONS:
 2. If the answer cannot be found in the context, say "I don't have information about that in the provided documents."
 3. Cite the source (e.g., [Source 1]) when providing information.
 4. Be concise and direct in your answers.
-5. Do NOT make up or hallucinate information not present in the context.
-"""
+5. Do NOT make up or hallucinate information not present in the context."""
         
         user_prompt = f"""Context:
 {context}
@@ -228,33 +196,26 @@ Answer (cite sources):"""
             {"role": "user", "content": user_prompt}
         ]
         
-        # Try Ollama first, then OpenRouter
         if self.use_ollama:
             return self._generate_with_ollama(messages)
         elif self.openrouter_api_key and OPENAI_AVAILABLE:
             return self._generate_with_openrouter(messages)
         else:
-            return "Error: No LLM backend available. Please install Ollama locally or set OPENROUTER_API_KEY environment variable."
+            return "Error: No LLM backend available. Please install Ollama locally or set OPENROUTER_API_KEY."
     
     def _generate_with_ollama(self, messages: List[Dict]) -> str:
-        """Generate answer using Ollama."""
         try:
-            response = ollama.chat(
-                model=self.llm_model,
-                messages=messages
-            )
+            response = ollama.chat(model=self.llm_model, messages=messages)
             return response['message']['content']
         except Exception as e:
             return f"Error with Ollama: {str(e)}"
     
     def _generate_with_openrouter(self, messages: List[Dict]) -> str:
-        """Generate answer using OpenRouter API."""
         try:
             client = openai.OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=self.openrouter_api_key
             )
-            
             response = client.chat.completions.create(
                 model=self.llm_model,
                 messages=messages
@@ -264,7 +225,6 @@ Answer (cite sources):"""
             return f"Error with OpenRouter: {str(e)}"
     
     def query(self, question: str, top_k: int = 3) -> Dict:
-        """Complete RAG query: retrieve and generate."""
         retrieved = self.retrieve(question, top_k)
         answer = self.generate_answer(question, retrieved)
         
@@ -284,7 +244,6 @@ Answer (cite sources):"""
         }
     
     def get_stats(self) -> Dict:
-        """Get statistics about the RAG pipeline."""
         return {
             "total_chunks": len(self.chunks),
             "embedding_dimension": self.embeddings.shape[1] if self.embeddings is not None else 0,
@@ -297,15 +256,11 @@ Answer (cite sources):"""
 
 if __name__ == "__main__":
     rag = RAGPipeline()
-    
-    print("\n" + "="*50)
-    print("RAG Pipeline Statistics:")
+    print("\nRAG Pipeline Statistics:")
     print(json.dumps(rag.get_stats(), indent=2))
     
     test_query = "What is the price of the Premier package?"
     print(f"\nTest Query: {test_query}")
-    print("="*50)
-    
     result = rag.query(test_query)
     print("\nGenerated Answer:")
     print(result["generated_answer"])
