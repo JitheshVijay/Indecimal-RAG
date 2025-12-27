@@ -1,0 +1,15 @@
+# ================================================================================
+# INDECIMAL RAG CHATBOT - PYTHON DEPENDENCIES
+# ================================================================================
+# Install with: pip install -r requirements.txt
+
+# Core RAG dependencies
+sentence-transformers>=2.2.0  # Text embeddings (all-MiniLM-L6-v2)
+faiss-cpu>=1.7.4              # Vector similarity search
+ollama>=0.1.0                 # Local LLM inference
+
+# Web UI
+streamlit>=1.28.0             # Chat interface framework
+
+# Utilities
+numpy>=1.24.0                 # Numerical operations for embeddings
